@@ -1,6 +1,6 @@
-# Dreams of Adulthood Alpha
+# Dreams of Adulthood gold
 
-Play the [Playable Alpha Build](https://jizhijin.github.io/DreamsOfAdultshood-Alpha/) in a desktop browser with a keyboard and mouse.
+Play the [Playable gold Build](https://jizhijin.github.io/DreamsOfAdultshood-Alpha/) in a desktop browser with a keyboard and mouse.
 
 The Alpha menu numbers its missions **1–6**. These correspond to the original missions **6 → 2 → 1 → 5 → 3 → 4**, in that order.
 
