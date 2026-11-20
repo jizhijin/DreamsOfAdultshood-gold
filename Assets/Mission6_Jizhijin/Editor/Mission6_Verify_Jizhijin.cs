@@ -19,7 +19,15 @@ public static class Mission6_Verify_Jizhijin
     static Mission6_Verify_Jizhijin()
     {
         EditorApplication.update+=Tick;EditorApplication.playModeStateChanged+=Changed;
+        InputSystem.onBeforeUpdate += EnsureKeyboard;
         Application.logMessageReceived+=(m,t,type)=>{if(SessionState.GetBool(Flag,false)&&(type==LogType.Error||type==LogType.Exception||type==LogType.Assert))errors.Add(m+"\n"+t);};
+    }
+    static void EnsureKeyboard()
+    {
+        if (!Application.isPlaying || !SessionState.GetBool(Flag, false) || Keyboard.current != null) return;
+        keyboard = InputSystem.AddDevice<Keyboard>();
+        keyboard.MakeCurrent();
+        SessionState.SetInt(Flag + ".keyboard", keyboard.deviceId);
     }
     [MenuItem("Mission6 Jizhijin/Verify two level campaign")]
     public static void Start()
@@ -30,8 +38,29 @@ public static class Mission6_Verify_Jizhijin
     static void Changed(PlayModeStateChange state)
     {
         if(!SessionState.GetBool(Flag,false))return;
-        if(state==PlayModeStateChange.EnteredPlayMode){stage=0;next=Time.realtimeSinceStartup+1;deadline=Time.realtimeSinceStartup+220;background=Application.runInBackground;Application.runInBackground=true;asyncShaders=ShaderUtil.allowAsyncCompilation;ShaderUtil.allowAsyncCompilation=false;}
-        if(state==PlayModeStateChange.EnteredEditMode){EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(SessionState.GetString(Flag+".previous",""));SessionState.SetBool(Flag,false);Write();}
+        if(state==PlayModeStateChange.EnteredPlayMode)
+        {
+            stage=0;next=Time.realtimeSinceStartup+1;deadline=Time.realtimeSinceStartup+220;
+            background=Application.runInBackground;Application.runInBackground=true;
+            asyncShaders=ShaderUtil.allowAsyncCompilation;ShaderUtil.allowAsyncCompilation=false;
+            SessionState.SetInt(Flag+".inputBackground",(int)InputSystem.settings.backgroundBehavior);
+            SessionState.SetInt(Flag+".editorInput",(int)InputSystem.settings.editorInputBehaviorInPlayMode);
+            InputSystem.settings.backgroundBehavior=InputSettings.BackgroundBehavior.IgnoreFocus;
+            InputSystem.settings.editorInputBehaviorInPlayMode=InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            if(keyboard==null)keyboard=InputSystem.AddDevice<Keyboard>();
+            keyboard.MakeCurrent();
+            SessionState.SetInt(Flag+".keyboard",keyboard.deviceId);
+        }
+        if(state==PlayModeStateChange.EnteredEditMode)
+        {
+            EditorSceneManager.playModeStartScene=AssetDatabase.LoadAssetAtPath<SceneAsset>(SessionState.GetString(Flag+".previous",""));
+            SessionState.SetBool(Flag,false);
+            var device=InputSystem.GetDeviceById(SessionState.GetInt(Flag+".keyboard",-1));
+            if(device!=null)InputSystem.RemoveDevice(device);
+            InputSystem.settings.backgroundBehavior=(InputSettings.BackgroundBehavior)SessionState.GetInt(Flag+".inputBackground",0);
+            InputSystem.settings.editorInputBehaviorInPlayMode=(InputSettings.EditorInputBehaviorInPlayMode)SessionState.GetInt(Flag+".editorInput",0);
+            Write();
+        }
     }
     static void Write(){Directory.CreateDirectory(Out);File.WriteAllLines(Out+"campaign-verification.txt",results.Concat(errors.Select(e=>"RUNTIME ERROR: "+e)));}
     static void Check(bool ok,string name){results.Add((ok?"PASS: ":"FAIL: ")+name);Write();if(!ok)throw new Exception(name);}
@@ -39,7 +68,7 @@ public static class Mission6_Verify_Jizhijin
     static void Key(params Key[] keys){InputSystem.QueueStateEvent(keyboard,new KeyboardState(keys));InputSystem.Update();}
     static void Pose(Vector3 p,float yaw=0,float pitch=0){var rb=c.moving.GetComponent<Rigidbody>();rb.position=p;rb.rotation=Quaternion.Euler(0,yaw,0);rb.linearVelocity=Vector3.zero;c.mouseLook.enabled=c.headBob.enabled=false;Camera.main.transform.localRotation=Quaternion.Euler(pitch,0,0);Physics.SyncTransforms();}
     static void Advance(int value,float delay=.25f){stage=value;next=Time.realtimeSinceStartup+delay;}
-    static void Finish(){if(keyboard!=null)InputSystem.RemoveDevice(keyboard);Time.timeScale=1;Application.runInBackground=background;ShaderUtil.allowAsyncCompilation=asyncShaders;results.Add(errors.Count==0?"PASS: no runtime errors":"FAIL: runtime errors");Write();stage=100;EditorApplication.ExitPlaymode();}
+    static void Finish(){Time.timeScale=1;Application.runInBackground=background;ShaderUtil.allowAsyncCompilation=asyncShaders;results.Add(errors.Count==0?"PASS: no runtime errors":"FAIL: runtime errors");Write();stage=100;EditorApplication.ExitPlaymode();}
     static Mission6_Spelling_ExitPanel_Jizhijin Puzzle=>c.puzzles[c.CurrentLevel.stageNumber-1];
     static void Fill(Mission6_Spelling_ExitPanel_Jizhijin p,int mask)
     {
@@ -81,8 +110,8 @@ public static class Mission6_Verify_Jizhijin
     }
     static int MinimumTurns(Mission6_StageDefinition_Jizhijin d)
     {
-        var distance=new int[d.size,d.size,4];var queue=new Queue<Vector3Int>();
-        for(int y=0;y<d.size;y++)for(int x=0;x<d.size;x++)for(int dir=0;dir<4;dir++)distance[x,y,dir]=int.MaxValue;
+        var distance=new int[d.Width,d.HeightInCells,4];var queue=new Queue<Vector3Int>();
+        for(int y=0;y<d.HeightInCells;y++)for(int x=0;x<d.Width;x++)for(int dir=0;dir<4;dir++)distance[x,y,dir]=int.MaxValue;
         for(int dir=0;dir<4;dir++){distance[d.Start.x,d.Start.y,dir]=0;queue.Enqueue(new Vector3Int(d.Start.x,d.Start.y,dir));}
         var directions=new[]{Vector2Int.up,Vector2Int.right,Vector2Int.down,Vector2Int.left};
         while(queue.Count>0)
@@ -101,24 +130,26 @@ public static class Mission6_Verify_Jizhijin
     static void Layout(Mission6_Grid_Level_Jizhijin level)
     {
         var d=level.Data;Check(d.words.Length==(d.number==1?10:15)&&d.minimumWords==(d.number==1?7:11),"level "+d.number+" word total and 70 percent pass requirement");
-        Check(level.transform.Cast<Transform>().Count(t=>t.name.StartsWith("Cell_"))==d.size*d.size,"level "+d.number+" has "+d.size+" x "+d.size+" tiles");
+        Check(level.transform.Cast<Transform>().Count(t=>t.name.StartsWith("Cell_"))==d.Width*d.HeightInCells,"level "+d.number+" has "+d.Width+" x "+d.HeightInCells+" tiles");
         var seen=new HashSet<Vector2Int>{d.Start};var queue=new Queue<Vector2Int>();queue.Enqueue(d.Start);while(queue.Count>0){var p=queue.Dequeue();foreach(var dir in new[]{Vector2Int.up,Vector2Int.down,Vector2Int.left,Vector2Int.right}){var n=p+dir;if(!d.IsWall(n.x,n.y)&&seen.Add(n))queue.Enqueue(n);}}
         Check(d.pickups.All(seen.Contains)&&seen.Contains(d.Exit)&&d.crossword.Keys.All(seen.Contains),"level "+d.number+" pickups, word cells and exit are reachable");
         Check(d.pickups.Distinct().Count()==d.pickups.Length&&d.pickups.All(p=>!d.crossword.ContainsKey(p)),"level "+d.number+" pickup markers do not cover crossword letters");
         Check(d.blanks.GroupBy(p=>d.crossword[p].answer).All(g=>d.letters.Count(ch=>ch==g.Key)>=g.Count()),"level "+d.number+" has enough physical tiles for every missing letter");
         Check(d.words.All(w=>Enumerable.Range(0,w.word.Length).Any(i=>d.crossword[w.CellAt(i)].missing)),"every level "+d.number+" word requires at least one player answer");
         var texture=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Mission6_Jizhijin/Materials/"+(d.number==1?"Mission6_GridMap_Jizhijin.png":"Mission6_GridMap_Level2_Jizhijin.png"));bool pixels=true;
-        for(int row=0;row<d.size;row++)for(int x=0;x<d.size;x++){var sample=texture.GetPixel(60+x*44+1,60+row*44+1);var expected=d.crossword.ContainsKey(new Vector2Int(x,row))?Mission6_GridMap_Jizhijin.WallColor:Mission6_GridMap_Jizhijin.TerrainColor(d,x,row);pixels&=Mathf.Abs(sample.r-expected.r)<.015f&&Mathf.Abs(sample.g-expected.g)<.015f;}
+        for(int row=0;row<d.HeightInCells;row++)for(int x=0;x<d.Width;x++){var sample=texture.GetPixel(60+x*44+1,60+row*44+1);var expected=d.crossword.ContainsKey(new Vector2Int(x,row))?Mission6_GridMap_Jizhijin.WallColor:Mission6_GridMap_Jizhijin.TerrainColor(d,x,row);pixels&=Mathf.Abs(sample.r-expected.r)<.015f&&Mathf.Abs(sample.g-expected.g)<.015f;}
         Check(pixels,"level "+d.number+" map agrees with every terrain and crossword cell");
         Check(level.GetComponentsInChildren<Mission6_LetterPickup_Collectible_Jizhijin>().Length==d.pickups.Length,"level "+d.number+" pickup count matches its map");
         if(d.number==2)
         {
             int walls=0,deadEnds=0,junctions=0;
-            foreach(var pos in Enumerable.Range(0,d.size).SelectMany(y=>Enumerable.Range(0,d.size).Select(x=>new Vector2Int(x,y))))
+            foreach(var pos in Enumerable.Range(0,d.HeightInCells).SelectMany(y=>Enumerable.Range(0,d.Width).Select(x=>new Vector2Int(x,y))))
             {if(d.IsWall(pos.x,pos.y)){walls++;continue;}int degree=new[]{Vector2Int.up,Vector2Int.down,Vector2Int.left,Vector2Int.right}.Count(v=>!d.IsWall(pos.x+v.x,pos.y+v.y));if(degree==1)deadEnds++;if(degree>=3)junctions++;}
-            Check(walls==175&&deadEnds<5,"approved model B retains its broad courts and limited walls: "+walls+" / "+deadEnds);
-            Check(MinimumTurns(d)==7,"every start-to-exit route requires at least seven turns, including crossword tiles");
-            Check(d.Start==new Vector2Int(3,3)&&d.Exit==new Vector2Int(3,24)&&d.Landmarks.Length==4,"model B places its start, exit and four court landmarks correctly");
+            Check(walls==542&&deadEnds<5,"combined B+C has its two courts and connecting gallery: "+walls+" wall cells / "+deadEnds+" dead ends");
+            Check(MinimumTurns(d)==14,"the B-to-C route requires at least fourteen grid turns");
+            Check(d.Width==56&&d.HeightInCells==32&&d.Start==new Vector2Int(3,3)&&d.Exit==new Vector2Int(52,3)&&d.Landmarks.Length==8,"B+C dimensions, final exit and eight landmarks match the design");
+            Check(d.pickups.Count(p=>p.x<28)==9&&d.pickups.Count(p=>p.x>=28)==9,"both B and C contain nine letter pickups");
+            Check(Enumerable.Range(1,26).All(y=>d.IsWall(27,y)&&d.IsWall(28,y)),"the dividing wall prevents a shortcut around B");
             foreach(var enemy in level.campaign.enemies)foreach(var patrol in enemy.patrolPoints)
             {var path=new UnityEngine.AI.NavMeshPath();Check(UnityEngine.AI.NavMesh.CalculatePath(enemy.transform.position,patrol.position,UnityEngine.AI.NavMesh.AllAreas,path)&&path.status==UnityEngine.AI.NavMeshPathStatus.PathComplete,"model B enemy patrol reaches "+patrol.name);}
             foreach(var pos in d.pickups.Concat(new[]{d.Exit}))
@@ -135,7 +166,7 @@ public static class Mission6_Verify_Jizhijin
             switch(stage)
             {
                 case 0:
-                    c=UnityEngine.Object.FindFirstObjectByType<Mission6_Campaign_Jizhijin>();keyboard=InputSystem.AddDevice<Keyboard>();c.mouseLook.enabled=c.headBob.enabled=false;
+                    c=UnityEngine.Object.FindFirstObjectByType<Mission6_Campaign_Jizhijin>();c.mouseLook.enabled=c.headBob.enabled=false;
                     Check(c.CurrentLevel==c.levels[0]&&c.Phase==Mission6_Phase_Jizhijin.Planning&&c.moving.enabled,"level one begins with a movable PLAN room");
                     Check(!RenderSettings.fog&&c.GateOpen&&!c.gateCollider.enabled,"clear view and unblocked physical passage at start");
                     Check(c.enterSecondButton.activeSelf&&c.enterSecondButton.GetComponent<Button>().interactable,"ENTER LEVEL 2 is immediately visible and clickable during PLAN");

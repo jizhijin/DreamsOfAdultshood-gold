@@ -4,6 +4,8 @@ Play the [Playable Alpha Build](https://jizhijin.github.io/DreamsOfAdultshood-Al
 
 The Alpha menu numbers its missions **1–6**. These correspond to the original missions **6 → 2 → 1 → 5 → 3 → 4**, in that order.
 
+The second crossword level combines B’s four courts with C’s double courtyard in a **56 × 32** map. A gallery connects the two areas. Each area contains nine letters and one patrolling sentinel.
+
 In the crossword mission, **NEXT MISSION** and **MAIN MENU** are available from the answer screen before solving the puzzle. Press **Z** during exploration to view the map photo once per level. Press **Z** again to put it away early.
 
 To open the Unity project, clone this repository and select its root folder in Unity Hub with **Unity 6000.3.23f1**. Add Web Build Support to build a browser version. Unity's enabled scene list defines the campaign order.

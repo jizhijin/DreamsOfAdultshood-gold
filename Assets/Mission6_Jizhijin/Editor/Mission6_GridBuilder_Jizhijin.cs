@@ -75,11 +75,13 @@ public static class Mission6_GridBuilder_Jizhijin
             var stage=BuildTerrain(rootGo.transform,data);stage.campaign=campaign;campaign.levels[n-1]=stage;
             var map=Mission6_GridMap_Jizhijin.Create(data);
             var photo=MapPanel("Photo_Level"+n,canvas.transform,map,"LEVEL "+n+" MAP",out var photoTitle);photo.SetActive(false);stage.photoPanel=photo;stage.photoTitle=photoTitle;
+            if(n==2)FitMap(photo,map,1050);
             if(n==2){campaign.night.photoMap=photo.transform.Find("GridMapImage").GetComponent<RawImage>();campaign.night.dayMap=map;campaign.night.nightMap=Mission6_GridMap_Jizhijin.Create(data,true);}
             var start=data.Start;var startPosition=data.Center(start.x,start.y);
             var board=new GameObject("PLAN_Board_Level"+n,typeof(RectTransform),typeof(Canvas));board.GetComponent<Canvas>().renderMode=RenderMode.WorldSpace;board.transform.SetParent(stage.transform,false);board.transform.position=startPosition+new Vector3(1.2f,3.35f,5.93f);board.transform.localScale=Vector3.one*.01f;board.GetComponent<RectTransform>().sizeDelta=new Vector2(800,800);
             var poster=MapPanel("Poster",board.transform,map,"LEVEL "+n+" / PLAN",out var boardTitle);boardTitle.gameObject.SetActive(false);
-            Label("Legend",poster.transform,"GOLD LETTERS / BLUE PLATFORMS / RED SENTINELS",15,new Vector2(0,-287),new Vector2(790,25));
+            if(n==2)FitMap(poster,map,750);
+            Label("Legend",poster.transform,n==1?"GOLD LETTERS / BLUE PLATFORMS / RED SENTINELS":"B FOUR COURTS > TOP GALLERY > C DOUBLE COURTYARD",15,new Vector2(0,-287),new Vector2(790,25));
             Label("Instruction",poster.transform,n==1?"WASD MOVE / LEAVE THROUGH THE RIGHT OPENING":"WASD MOVE / PASS THE BOARD OR LEAVE TO THE RIGHT",16,new Vector2(0,-318),new Vector2(790,26));
             stage.planPanel=board;if(n==2)board.SetActive(false);
             Trigger("Leave_PLAN",stage,0,startPosition+new Vector3(6.9f,2,0),new Vector3(.4f,5,n==1?2.2f:12));
@@ -112,9 +114,9 @@ public static class Mission6_GridBuilder_Jizhijin
     }
     static Mission6_Grid_Level_Jizhijin BuildTerrain(Transform parent,Mission6_StageDefinition_Jizhijin d)
     {
-        var root=new GameObject("Level"+d.number+"_"+d.size+"x"+d.size);root.transform.SetParent(parent);root.transform.position=d.origin;var stage=root.AddComponent<Mission6_Grid_Level_Jizhijin>();stage.stageNumber=d.number;
+        var root=new GameObject("Level"+d.number+"_"+d.Width+"x"+d.HeightInCells);root.transform.SetParent(parent);root.transform.position=d.origin;var stage=root.AddComponent<Mission6_Grid_Level_Jizhijin>();stage.stageNumber=d.number;
         var a=Material("GridFloorA",new Color(.44f,.56f,.51f));var b=Material("GridFloorB",new Color(.5f,.62f,.56f));var wall=Material("GridWall",new Color(.23f,.35f,.4f));var raised=Material("GridRaised",new Color(.24f,.5f,.59f));var rampMat=Material("GridRamp",new Color(.65f,.51f,.33f));var wordMat=Material("GridWord",new Color(.86f,.82f,.64f));
-        for(int row=0;row<d.size;row++)for(int x=0;x<d.size;x++)
+        for(int row=0;row<d.HeightInCells;row++)for(int x=0;x<d.Width;x++)
         {
             var tile=Cube("Cell_"+x.ToString("00")+"_"+row.ToString("00"),root.transform,d.Center(x,row,-.1f),new Vector3(2.37f,.2f,2.37f),d.Height(x,row)>0?raised:((x+row)%2==0?a:b));
             int ramp=d.Ramp(x,row);if(ramp!=0){tile.transform.position=d.Center(x,row,.08f);tile.transform.rotation=Quaternion.Euler(0,0,ramp*Mathf.Atan(.36f/2.4f)*Mathf.Rad2Deg);tile.transform.localScale=new Vector3(2.43f,.2f,2.37f);tile.GetComponent<Renderer>().sharedMaterial=rampMat;}
@@ -122,15 +124,16 @@ public static class Mission6_GridBuilder_Jizhijin
             if(d.crossword.TryGetValue(new Vector2Int(x,row),out var c))
             {tile.GetComponent<Renderer>().sharedMaterial=wordMat;var glyph=WorldText("Word_"+x+"_"+row,root.transform,d.Center(x,row,.025f),c.missing?"_":c.answer.ToString(),11);glyph.transform.rotation=Quaternion.Euler(90,0,0);glyph.color=new Color(.08f,.18f,.2f);}
         }
-        string[] landmarkNames={"1 / START COURT","2 / RAISED COURT","3 / SENTINEL COURT","4 / EXIT COURT"};
+        string[] landmarkNames={"1 / B START","2 / B PLATFORM","3 / B UPPER COURT","4 / TO C GALLERY","5 / C ENTRANCE","6 / C UPPER LOOP","7 / C CROSSING","8 / C EXIT"};
         for(int i=0;i<d.Landmarks.Length;i++)
         {
             var p=d.Landmarks[i];Cube("Landmark_"+(i+1),root.transform,d.Center(p.x,p.y,.02f),new Vector3(1.8f,.04f,1.8f),raised);
             var label=WorldText("LandmarkSign_"+(i+1),root.transform,d.Center(p.x,p.y,2.6f),landmarkNames[i],4);label.rectTransform.sizeDelta=new Vector2(8,1.2f);label.gameObject.AddComponent<FaceCamera>();
         }
-        float width=d.size*2.4f;
-        Cube("Boundary_North",root.transform,d.origin+new Vector3(width/2,1.8f,width+.2f),new Vector3(width,3.6f,.4f),wall);Cube("Boundary_South",root.transform,d.origin+new Vector3(width/2,1.8f,-.2f),new Vector3(width,3.6f,.4f),wall);
-        for(int r=0;r<d.size;r++)
+        float width=d.Width*Mission6_StageDefinition_Jizhijin.CellSize;
+        float depth=d.HeightInCells*Mission6_StageDefinition_Jizhijin.CellSize;
+        Cube("Boundary_North",root.transform,d.origin+new Vector3(width/2,1.8f,depth+.2f),new Vector3(width,3.6f,.4f),wall);Cube("Boundary_South",root.transform,d.origin+new Vector3(width/2,1.8f,-.2f),new Vector3(width,3.6f,.4f),wall);
+        for(int r=0;r<d.HeightInCells;r++)
         {
             if(!(d.number==2&&r==1))Cube("Boundary_West_"+r,root.transform,d.origin+new Vector3(-.2f,1.8f,(r+.5f)*2.4f),new Vector3(.4f,3.6f,2.4f),wall);
             if(!(d.number==1&&r==18))Cube("Boundary_East_"+r,root.transform,d.origin+new Vector3(width+.2f,1.8f,(r+.5f)*2.4f),new Vector3(.4f,3.6f,2.4f),wall);
@@ -144,7 +147,10 @@ public static class Mission6_GridBuilder_Jizhijin
         var sources=new List<NavMeshBuildSource>();foreach(var box in campaign.levels[1].GetComponentsInChildren<BoxCollider>())
         {if(box.isTrigger)continue;sources.Add(new NavMeshBuildSource{shape=NavMeshBuildSourceShape.Box,transform=box.transform.localToWorldMatrix*Matrix4x4.Translate(box.center),size=box.size,area=0});}
         var settings=NavMesh.GetSettingsByID(0);settings.agentRadius=.35f;settings.agentHeight=1.8f;settings.agentClimb=.5f;settings.overrideVoxelSize=true;settings.voxelSize=.12f;
-        var data=NavMeshBuilder.BuildNavMeshData(settings,sources,new Bounds(campaign.levels[1].Data.origin+new Vector3(33,3,33),new Vector3(75,16,75)),Vector3.zero,Quaternion.identity);
+        var layout=campaign.levels[1].Data;
+        var dimensions=new Vector3(layout.Width*Mission6_StageDefinition_Jizhijin.CellSize,0,layout.HeightInCells*Mission6_StageDefinition_Jizhijin.CellSize);
+        var bounds=new Bounds(layout.origin+dimensions/2+Vector3.up*3,dimensions+new Vector3(8,16,8));
+        var data=NavMeshBuilder.BuildNavMeshData(settings,sources,bounds,Vector3.zero,Quaternion.identity);
         const string path=Root+"/Materials/Mission6_Level2_NavMesh.asset";var old=AssetDatabase.LoadAssetAtPath<NavMeshData>(path);
         if(old==null){AssetDatabase.CreateAsset(data,path);campaign.navigation=data;}else{EditorUtility.CopySerialized(data,old);Object.DestroyImmediate(data);campaign.navigation=old;EditorUtility.SetDirty(old);}
     }
@@ -158,10 +164,16 @@ public static class Mission6_GridBuilder_Jizhijin
             var body=GameObject.CreatePrimitive(PrimitiveType.Capsule);body.name="Body";body.transform.SetParent(go.transform,false);body.transform.localPosition=new Vector3(0,1,0);body.transform.localScale=new Vector3(.85f,1,.85f);body.GetComponent<Renderer>().sharedMaterial=mat;Object.DestroyImmediate(body.GetComponent<Collider>());
             var eyes=Cube("Eyes",go.transform,go.transform.position+new Vector3(0,1.5f,.4f),new Vector3(.5f,.16f,.12f),eye);Object.DestroyImmediate(eyes.GetComponent<Collider>());
             var enemy=go.GetComponent<Mission6_Enemy_Jizhijin>();enemy.player=campaign.moving.transform;enemy.campaign=campaign;
-            var points=i==0?new[]{new Vector2Int(23,10),new Vector2Int(25,8),new Vector2Int(17,9),new Vector2Int(16,5)}:new[]{new Vector2Int(23,20),new Vector2Int(23,24),new Vector2Int(22,16),new Vector2Int(17,18)};
+            var points=i==0?new[]{new Vector2Int(23,10),new Vector2Int(25,8),new Vector2Int(17,9),new Vector2Int(16,5)}:new[]{new Vector2Int(51,15),new Vector2Int(51,24),new Vector2Int(44,24),new Vector2Int(45,15)};
             enemy.patrolPoints=points.Select((p,index)=>{var t=new GameObject("Patrol_"+i+"_"+index).transform;t.SetParent(campaign.levels[1].transform);t.position=d.Center(p.x,p.y);return t;}).ToArray();list.Add(enemy);
         }
         campaign.enemies=list.ToArray();
+    }
+    static void FitMap(GameObject panel,Texture2D texture,float width)
+    {
+        var rect=panel.transform.Find("GridMapImage").GetComponent<RectTransform>();
+        width=Mathf.Min(width,540f*texture.width/texture.height);
+        rect.sizeDelta=new Vector2(width,width*texture.height/texture.width);
     }
     static GameObject MapPanel(string name,Transform parent,Texture2D map,string heading,out TMP_Text title)
     {

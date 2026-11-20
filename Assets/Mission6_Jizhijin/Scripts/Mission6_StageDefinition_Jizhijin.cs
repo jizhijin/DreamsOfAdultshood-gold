@@ -28,13 +28,19 @@ public sealed class Mission6_StageDefinition_Jizhijin
     public Vector2Int[] blanks, pickups, enemies;
     public string letters;
     bool[,] mazeWalls;
+    public int Width => number == 2 ? 56 : size;
+    public int HeightInCells => number == 2 ? 32 : size;
     public Vector2Int Start => number == 2 ? new Vector2Int(3, 3) : new Vector2Int(1, 1);
-    public Vector2Int Exit => number == 2 ? new Vector2Int(3, 24) : new Vector2Int(size - 2, size - 2);
-    public Vector2Int[] Landmarks => number == 2 ? new[] { new Vector2Int(11, 1), new Vector2Int(24, 10), new Vector2Int(24, 23), new Vector2Int(10, 24) } : Array.Empty<Vector2Int>();
+    public Vector2Int Exit => number == 2 ? new Vector2Int(52, 3) : new Vector2Int(size - 2, size - 2);
+    public Vector2Int[] Landmarks => number == 2 ? new[]
+    {
+        new Vector2Int(11, 1), new Vector2Int(24, 10), new Vector2Int(24, 23), new Vector2Int(10, 24),
+        new Vector2Int(31, 24), new Vector2Int(51, 24), new Vector2Int(44, 14), new Vector2Int(50, 3)
+    } : Array.Empty<Vector2Int>();
     public Vector3 Center(int x, int row, float y = 0) => origin + new Vector3((x + .5f) * CellSize, y + Height(x, row), (row + .5f) * CellSize);
     public bool IsWall(int x, int row)
     {
-        if (x < 0 || row < 0 || x >= size || row >= size) return true;
+        if (x < 0 || row < 0 || x >= Width || row >= HeightInCells) return true;
         if (number == 2) return mazeWalls[x, row];
         if (crossword.ContainsKey(new Vector2Int(x, row))) return false;
         if (x == 4 && row < 4 && row != 1) return true;
@@ -85,25 +91,47 @@ public sealed class Mission6_StageDefinition_Jizhijin
     }
     void BuildMaze()
     {
-        mazeWalls = new bool[size, size];
-        // Approved model B. Convert its top-down drawing rows to world grid rows.
-        // Offset openings join SW -> SE -> NE -> NW; crossword tiles never carve walls.
-        for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
+        mazeWalls = new bool[Width, HeightInCells];
+        for (int row = 0; row < HeightInCells; row++)
+        for (int x = 0; x < Width; x++)
         {
-            int drawingRow = size - 1 - y;
-            bool boundary = x == 0 || y == 0 || x == size - 1 || y == size - 1;
-            bool zones = (x == 14 && !(drawingRow >= 6 && drawingRow <= 9) && !(drawingRow >= 21 && drawingRow <= 24))
-                || (drawingRow == 14 && (x < 21 || x > 24));
-            bool dividers = (x == 7 && drawingRow >= 1 && drawingRow <= 9)
-                || (x == 7 && drawingRow == 13)
-                || (drawingRow == 20 && x >= 15 && x <= 26 && (x < 16 || x > 18))
-                || (x == 7 && drawingRow >= 18 && drawingRow <= 22)
-                || (x == 20 && drawingRow >= 3 && drawingRow <= 7);
-            mazeWalls[x, y] = boundary || zones || dividers;
+            if (row < 28)
+                mazeWalls[x, row] = x < 28 ? IsFourCourtWall(x, row) : IsDoubleCourtyardWall(x - 28, row);
+            else
+                mazeWalls[x, row] = true;
         }
-        mazeWalls[0, 1] = false; // Existing physical connection from level one.
+        // Three-cell-deep connecting gallery joins B's exit court to C's entrance.
+        // The solid dividing wall prevents entering C before traversing B.
+        for (int row = 28; row <= 30; row++)
+        for (int x = 2; x <= 33; x++)
+            mazeWalls[x, row] = false;
+        for (int x = 2; x <= 5; x++) mazeWalls[x, 27] = false;
+        for (int x = 30; x <= 33; x++) mazeWalls[x, 27] = false;
+        mazeWalls[0, 1] = false;
         if (crossword.Keys.Concat(pickups).Concat(enemies).Concat(Landmarks).Concat(new[] { Start, Exit }).Any(p => IsWall(p.x, p.y)))
-            throw new InvalidOperationException("Model B content overlaps a wall");
+            throw new InvalidOperationException("Combined B+C content overlaps a wall");
+    }
+    static bool IsFourCourtWall(int x, int row)
+    {
+        int drawingRow = 27 - row;
+        bool boundary = x == 0 || row == 0 || x == 27 || row == 27;
+        bool zones = (x == 14 && !(drawingRow >= 6 && drawingRow <= 9) && !(drawingRow >= 21 && drawingRow <= 24))
+            || (drawingRow == 14 && (x < 21 || x > 24));
+        bool dividers = (x == 7 && drawingRow >= 1 && drawingRow <= 9)
+            || (x == 7 && drawingRow == 13)
+            || (drawingRow == 20 && x >= 15 && x <= 26 && (x < 16 || x > 18))
+            || (x == 7 && drawingRow >= 18 && drawingRow <= 22)
+            || (x == 20 && drawingRow >= 3 && drawingRow <= 7);
+        return boundary || zones || dividers;
+    }
+    static bool IsDoubleCourtyardWall(int x, int row)
+    {
+        // Model C rotated 180 degrees so its entrance faces the connecting gallery.
+        bool boundary = x == 0 || row == 0 || x == 27 || row == 27;
+        bool courtyard = x >= 8 && x <= 19 && ((row >= 6 && row <= 10) || (row >= 17 && row <= 21));
+        bool sideWalls = row == 14 && (x <= 7 || x >= 20);
+        bool centerWalls = x == 13 && ((row >= 11 && row <= 13) || (row >= 15 && row <= 16));
+        return boundary || courtyard || sideWalls || centerWalls;
     }
     static Mission6_WordClue_Jizhijin W(string word, string mask, int x, int row, bool down, string hint) => new Mission6_WordClue_Jizhijin(word, mask, x, row, 0, down, hint);
     public static readonly Mission6_StageDefinition_Jizhijin First = Build(false);
@@ -128,9 +156,15 @@ public sealed class Mission6_StageDefinition_Jizhijin
             W("KEY", "_EY", 7, 13, false, "Opens a lock"), W("FEW", "_EW", 12, 15, true, "A small number")
         };
         if (second) d.words = d.words.Select(w => new Mission6_WordClue_Jizhijin(w.word, w.mask, w.x - 3, w.row - 13, 0, w.down, w.hint)).ToArray();
-        d.pickups = second ? new[] { new Vector2Int(1,10),new Vector2Int(10,10),new Vector2Int(11,5),new Vector2Int(10,1),new Vector2Int(16,3),new Vector2Int(24,3),new Vector2Int(16,10),new Vector2Int(23,11),new Vector2Int(25,8),new Vector2Int(16,16),new Vector2Int(24,16),new Vector2Int(25,23),new Vector2Int(17,25),new Vector2Int(22,19),new Vector2Int(11,17),new Vector2Int(11,24),new Vector2Int(3,16),new Vector2Int(3,22) }
+        d.pickups = second ? new[]
+        {
+            new Vector2Int(1,10), new Vector2Int(10,10), new Vector2Int(11,5), new Vector2Int(16,3),
+            new Vector2Int(23,11), new Vector2Int(24,16), new Vector2Int(25,23), new Vector2Int(11,17), new Vector2Int(3,22),
+            new Vector2Int(32,24), new Vector2Int(44,24), new Vector2Int(51,23), new Vector2Int(50,15),
+            new Vector2Int(45,13), new Vector2Int(34,15), new Vector2Int(31,9), new Vector2Int(43,3), new Vector2Int(52,5)
+        }
             : new[] { new Vector2Int(9,2),new Vector2Int(13,3),new Vector2Int(18,6),new Vector2Int(12,9),new Vector2Int(8,10),new Vector2Int(4,14),new Vector2Int(14,15),new Vector2Int(9,18),new Vector2Int(17,18) };
-        d.letters = "KARFEOHUV"; d.enemies = second ? new[] { new Vector2Int(23,10), new Vector2Int(23,20) } : Array.Empty<Vector2Int>();
+        d.letters = "KARFEOHUV"; d.enemies = second ? new[] { new Vector2Int(23,10), new Vector2Int(51,15) } : Array.Empty<Vector2Int>();
         d.Prepare(); return d;
     }
 }
